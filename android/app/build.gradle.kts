@@ -39,6 +39,14 @@ android {
     }
 }
 
+dependencies {
+    // Required by google_mlkit_text_recognition when R8 scans script-specific options.
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+}
+
 flutter {
     source = "../.."
 }
