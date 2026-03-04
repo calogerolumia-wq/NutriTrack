@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Override uCrop palette to keep toolbar actions visible (white on dark). -->
+    <color name="ucrop_color_toolbar">#1F2937</color>
+    <color name="ucrop_color_statusbar">#111827</color>
+    <color name="ucrop_color_toolbar_widget">#FFFFFF</color>
+</resources>

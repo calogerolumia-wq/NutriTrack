@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/ucrop_color_toolbar</item>
+        <item name="colorPrimaryDark">@color/ucrop_color_statusbar</item>
+        <item name="android:statusBarColor">@color/ucrop_color_statusbar</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>
