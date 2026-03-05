@@ -36,6 +36,15 @@ class DietTextParser {
     r'^(\d+(?:[.,]\d+)?)\s+(?:di\s+)?(.+)$',
     caseSensitive: false,
   );
+  static final _qtyStandalonePattern = RegExp(
+    r'^[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*(g|gr|grammi|kg|ml|l|pz|pezzi|uovo|uova|fette?)\.?\s*[\)\]]?$',
+    caseSensitive: false,
+  );
+  static final _qtyNumberOnlyPattern = RegExp(r'^[\(\[]?\s*(\d+(?:[.,]\d+)?)\s*[\)\]]?$');
+  static final _qtyUnitOnlyPattern = RegExp(
+    r'^[\(\[]?\s*(g|gr|grammi|kg|ml|l|pz|pezzi|uovo|uova|fette?)\.?\s*[\)\]]?$',
+    caseSensitive: false,
+  );
   static final _qtyWordAtStartPattern = RegExp(
     r"^(un|uno|una|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\b(?:\s+|')(?:(?:di)\s+)?(.+)$",
     caseSensitive: false,
@@ -224,40 +233,176 @@ class DietTextParser {
     if (width < 120) {
       return lines.map((line) => _InputLine(text: line.text.trim())).toList();
     }
-    final splitX = minLeft + width * 0.56;
-
-    final leftLines = lines.where((line) => line.centerX <= splitX).toList();
-    final rightLines = lines.where((line) => line.centerX > splitX).toList();
-    if (leftLines.isEmpty || rightLines.isEmpty) {
+    final rows = _groupLinesByRow(lines);
+    if (rows.isEmpty) {
       return lines.map((line) => _InputLine(text: line.text.trim())).toList();
     }
 
-    final usedRight = <int>{};
+    final leftMaxX = minLeft + width * 0.45;
+    final rightMinX = minLeft + width * 0.72;
     final output = <_InputLine>[];
-    for (final left in leftLines) {
-      final alternatives = <String>[];
-      for (var i = 0; i < rightLines.length; i++) {
-        final right = rightLines[i];
-        if (usedRight.contains(i)) {
+    for (final row in rows) {
+      final rowLines = [...row.lines]..sort((a, b) => a.left.compareTo(b.left));
+      final leftParts = <OcrLayoutLine>[];
+      final centerParts = <OcrLayoutLine>[];
+      final rightParts = <OcrLayoutLine>[];
+      for (final part in rowLines) {
+        if (part.centerX <= leftMaxX) {
+          leftParts.add(part);
+        } else if (part.centerX >= rightMinX) {
+          rightParts.add(part);
+        } else {
+          centerParts.add(part);
+        }
+      }
+
+      // Fallback: at least the first token on the row is treated as main text.
+      if (leftParts.isEmpty && rowLines.isNotEmpty) {
+        leftParts.add(rowLines.first);
+        for (var i = 1; i < rowLines.length; i++) {
+          final part = rowLines[i];
+          if (part.centerX >= rightMinX) {
+            rightParts.add(part);
+          } else {
+            centerParts.add(part);
+          }
+        }
+      }
+
+      var mainText = _joinLayoutTexts(leftParts);
+      final centerParse = _extractCenterColumn(centerParts.map((part) => part.text));
+      if (mainText.isNotEmpty && centerParse.quantitySuffixes.isNotEmpty) {
+        mainText = '$mainText ${centerParse.quantitySuffixes.join(' ')}'.trim();
+      } else if (mainText.isEmpty && centerParse.quantitySuffixes.isNotEmpty) {
+        mainText = centerParse.quantitySuffixes.join(' ').trim();
+      }
+
+      final alternatives = _dedupeTexts([
+        ...centerParse.nonQuantityTexts,
+        ...rightParts.map((part) => part.text),
+      ]);
+      if (mainText.isEmpty) {
+        if (alternatives.isEmpty) {
           continue;
         }
-        final tolerance = left.height < 14 ? 14 : left.height * 0.85;
-        if ((right.centerY - left.centerY).abs() <= tolerance) {
-          alternatives.add(right.text.trim());
-          usedRight.add(i);
-        }
-      }
-      output.add(_InputLine(text: left.text.trim(), sideAlternativeTexts: alternatives));
-    }
-
-    for (var i = 0; i < rightLines.length; i++) {
-      if (usedRight.contains(i)) {
+        output.add(
+          _InputLine(
+            text: alternatives.first,
+            sideAlternativeTexts: alternatives.skip(1).toList(),
+          ),
+        );
         continue;
       }
-      output.add(_InputLine(text: rightLines[i].text.trim()));
+
+      output.add(
+        _InputLine(
+          text: mainText,
+          sideAlternativeTexts: alternatives,
+        ),
+      );
     }
 
     return output.where((line) => line.text.isNotEmpty).toList();
+  }
+
+  List<_LayoutRow> _groupLinesByRow(List<OcrLayoutLine> sortedLines) {
+    final rows = <_LayoutRow>[];
+    for (final line in sortedLines) {
+      if (rows.isEmpty) {
+        rows.add(_LayoutRow(lines: [line], centerY: line.centerY, avgHeight: line.height));
+        continue;
+      }
+      final last = rows.last;
+      final tolerance = _rowTolerance(last, line);
+      if ((line.centerY - last.centerY).abs() <= tolerance) {
+        last.lines.add(line);
+        final count = last.lines.length.toDouble();
+        last.centerY = ((last.centerY * (count - 1)) + line.centerY) / count;
+        last.avgHeight = ((last.avgHeight * (count - 1)) + line.height) / count;
+      } else {
+        rows.add(_LayoutRow(lines: [line], centerY: line.centerY, avgHeight: line.height));
+      }
+    }
+    return rows;
+  }
+
+  double _rowTolerance(_LayoutRow row, OcrLayoutLine line) {
+    final baseHeight = row.avgHeight > line.height ? row.avgHeight : line.height;
+    final scaled = baseHeight * 0.9;
+    return scaled < 12 ? 12 : scaled;
+  }
+
+  String _joinLayoutTexts(List<OcrLayoutLine> parts) {
+    if (parts.isEmpty) {
+      return '';
+    }
+    final ordered = [...parts]..sort((a, b) => a.left.compareTo(b.left));
+    return ordered
+        .map((part) => part.text.trim())
+        .where((text) => text.isNotEmpty)
+        .join(' ')
+        .replaceAll(_spaces, ' ')
+        .trim();
+  }
+
+  _CenterColumnParse _extractCenterColumn(Iterable<String> rawTexts) {
+    final texts = rawTexts.map((value) => value.trim()).where((value) => value.isNotEmpty).toList();
+    final quantitySuffixes = <String>[];
+    final nonQuantityTexts = <String>[];
+    var index = 0;
+    while (index < texts.length) {
+      final current = texts[index].replaceAll(_spaces, ' ').trim();
+      final standaloneMatch = _qtyStandalonePattern.firstMatch(current);
+      if (standaloneMatch != null) {
+        final number = standaloneMatch.group(1);
+        final unit = standaloneMatch.group(2)?.toLowerCase();
+        if (number != null && unit != null) {
+          quantitySuffixes.add('$number $unit');
+          index++;
+          continue;
+        }
+      }
+
+      final numberOnly = _qtyNumberOnlyPattern.firstMatch(current);
+      if (numberOnly != null && index + 1 < texts.length) {
+        final maybeUnit = texts[index + 1].replaceAll(_spaces, ' ').trim();
+        final unitOnly = _qtyUnitOnlyPattern.firstMatch(maybeUnit);
+        if (unitOnly != null) {
+          final number = numberOnly.group(1);
+          final unit = unitOnly.group(1)?.toLowerCase();
+          if (number != null && unit != null) {
+            quantitySuffixes.add('$number $unit');
+            index += 2;
+            continue;
+          }
+        }
+      }
+
+      nonQuantityTexts.add(current);
+      index++;
+    }
+    return _CenterColumnParse(
+      quantitySuffixes: _dedupeTexts(quantitySuffixes),
+      nonQuantityTexts: _dedupeTexts(nonQuantityTexts),
+    );
+  }
+
+  List<String> _dedupeTexts(Iterable<String> values) {
+    final deduped = <String>[];
+    final seen = <String>{};
+    for (final value in values) {
+      final text = value.replaceAll(_spaces, ' ').trim();
+      if (text.isEmpty) {
+        continue;
+      }
+      final key = _normalize(text);
+      if (key.isEmpty || seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduped.add(text);
+    }
+    return deduped;
   }
 
   _MainLineSplit _splitMainAndInlineAlternatives(String text) {
@@ -637,6 +782,28 @@ class _MainLineSplit {
 
   final String mainText;
   final List<String> inlineAlternatives;
+}
+
+class _LayoutRow {
+  _LayoutRow({
+    required this.lines,
+    required this.centerY,
+    required this.avgHeight,
+  });
+
+  final List<OcrLayoutLine> lines;
+  double centerY;
+  double avgHeight;
+}
+
+class _CenterColumnParse {
+  const _CenterColumnParse({
+    this.quantitySuffixes = const [],
+    this.nonQuantityTexts = const [],
+  });
+
+  final List<String> quantitySuffixes;
+  final List<String> nonQuantityTexts;
 }
 
 

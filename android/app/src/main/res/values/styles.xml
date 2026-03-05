@@ -20,6 +20,9 @@
         <item name="colorPrimary">@color/ucrop_color_toolbar</item>
         <item name="colorPrimaryDark">@color/ucrop_color_statusbar</item>
         <item name="android:statusBarColor">@color/ucrop_color_statusbar</item>
+        <item name="android:navigationBarColor">@color/ucrop_color_statusbar</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">never</item>
+        <item name="android:windowFullscreen">false</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

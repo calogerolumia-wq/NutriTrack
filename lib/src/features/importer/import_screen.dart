@@ -102,6 +102,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Ritaglia dieta',
+            toolbarColor: Color(0xFF1F2937),
+            statusBarColor: Color(0xFF111827),
             toolbarWidgetColor: Colors.white,
             lockAspectRatio: false,
             hideBottomControls: false,
