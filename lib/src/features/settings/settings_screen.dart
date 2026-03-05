@@ -9,6 +9,7 @@ import '../../data/models/diet_plan.dart';
 import '../../data/models/meal.dart';
 import '../../data/models/meal_item.dart';
 import '../../state/diet_provider.dart';
+import '../../state/providers.dart';
 import '../../state/theme_controller.dart';
 import '../../state/ui_preferences_controller.dart';
 
@@ -18,7 +19,9 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final selectedThemeMode = themeMode == ThemeMode.system ? ThemeMode.dark : themeMode;
     final showAdvancedDayMetrics = ref.watch(showAdvancedDayMetricsProvider);
+    final readOnly = ref.watch(dietReadOnlyProvider);
     final planAsync = ref.watch(dietControllerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Impostazioni')),
@@ -31,13 +34,25 @@ class SettingsScreen extends ConsumerWidget {
             children: [
               _PlanCard(
                 plan: plan,
+                enabled: !readOnly,
                 onEditName: () => _editPlanInfo(context, ref, plan),
               ),
               const SizedBox(height: 14),
               _TargetsCard(
                 targets: plan.targets,
+                enabled: !readOnly,
                 onEdit: () => _editTargets(context, ref, plan.targets),
               ),
+              if (readOnly) ...[
+                const SizedBox(height: 14),
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.lock_outline),
+                    title: Text('Modalita solo lettura attiva'),
+                    subtitle: Text('Le modifiche al piano sono bloccate finche "Lock diet" resta attivo.'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               Card(
                 child: Padding(
@@ -50,16 +65,31 @@ class SettingsScreen extends ConsumerWidget {
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 10),
-                      SegmentedButton<ThemeMode>(
-                        selected: {themeMode},
-                        onSelectionChanged: (selection) {
-                          ref.read(themeModeProvider.notifier).setThemeMode(selection.first);
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(),
+                              child: SegmentedButton<ThemeMode>(
+                                selected: {selectedThemeMode},
+                                onSelectionChanged: (selection) {
+                                  ref.read(themeModeProvider.notifier).setThemeMode(selection.first);
+                                },
+                                segments: const [
+                                  ButtonSegment(
+                                    value: ThemeMode.light,
+                                    label: Text('Light', softWrap: false),
+                                  ),
+                                  ButtonSegment(
+                                    value: ThemeMode.dark,
+                                    label: Text('Dark', softWrap: false),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
                         },
-                        segments: const [
-                          ButtonSegment(value: ThemeMode.system, label: Text('Sistema')),
-                          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
-                        ],
                       ),
                     ],
                   ),
@@ -100,10 +130,71 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 14),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reset dati',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Cancella tutto il piano: giorni, pasti, obiettivi e note. Azione irreversibile.',
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: readOnly ? null : () => _confirmResetData(context, ref),
+                        icon: const Icon(Icons.delete_forever_outlined),
+                        label: const Text('Reset dati'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           );
         },
       ),
+    );
+  }
+
+  Future<void> _confirmResetData(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Conferma reset dati'),
+        content: const Text(
+          'Questa azione elimina tutti i dati salvati della dieta e non si puo annullare. Vuoi continuare?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Elimina tutto'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    await ref.read(dietControllerProvider.notifier).resetData();
+    ref.read(mealClipboardProvider.notifier).state = const [];
+    ref.read(selectedDateProvider.notifier).state = DateTime.now();
+
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Dati resettati. Piano vuoto creato.')),
     );
   }
 
@@ -370,10 +461,12 @@ class SettingsScreen extends ConsumerWidget {
 class _PlanCard extends StatelessWidget {
   const _PlanCard({
     required this.plan,
+    required this.enabled,
     required this.onEditName,
   });
 
   final DietPlan plan;
+  final bool enabled;
   final VoidCallback onEditName;
 
   @override
@@ -392,7 +485,7 @@ class _PlanCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
-                IconButton(onPressed: onEditName, icon: const Icon(Icons.edit_outlined)),
+                IconButton(onPressed: enabled ? onEditName : null, icon: const Icon(Icons.edit_outlined)),
               ],
             ),
             if (plan.note.isNotEmpty) Text(plan.note),
@@ -406,10 +499,12 @@ class _PlanCard extends StatelessWidget {
 class _TargetsCard extends StatelessWidget {
   const _TargetsCard({
     required this.targets,
+    required this.enabled,
     required this.onEdit,
   });
 
   final MacroTargets targets;
+  final bool enabled;
   final VoidCallback onEdit;
 
   @override
@@ -430,7 +525,7 @@ class _TargetsCard extends StatelessWidget {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: onEdit,
+                  onPressed: enabled ? onEdit : null,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Modifica'),
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/app_date_utils.dart';
+import '../../core/utils/food_icon_utils.dart';
 import '../../core/utils/meal_icon_utils.dart';
 import '../../data/models/meal.dart';
 import '../../state/diet_provider.dart';
@@ -431,7 +432,8 @@ class _DayReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final warnColor = day.uncertain ? Colors.orange.withOpacity(0.16) : Colors.transparent;
+    final colorScheme = Theme.of(context).colorScheme;
+    final warnColor = day.uncertain ? colorScheme.tertiary.withOpacity(0.16) : Colors.transparent;
     return Card(
       child: Container(
         decoration: BoxDecoration(
@@ -474,9 +476,12 @@ class _DayReviewCard extends StatelessWidget {
             const SizedBox(height: 4),
             _ConfidenceChip(level: _confidenceForDay(day)),
             if (day.uncertain)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 8),
-                child: Text('Campo incerto da OCR', style: TextStyle(color: Colors.orange)),
+                child: Text(
+                  'Campo incerto da OCR',
+                  style: TextStyle(color: colorScheme.tertiary),
+                ),
               ),
             const SizedBox(height: 8),
             Wrap(
@@ -500,7 +505,7 @@ class _DayReviewCard extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: meal.uncertain
-                        ? Colors.orange.withOpacity(0.12)
+                        ? colorScheme.tertiary.withOpacity(0.12)
                         : Theme.of(context).colorScheme.surfaceContainer,
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -552,6 +557,10 @@ class _DayReviewCard extends StatelessWidget {
                             onTap: () => onSetMealType(mealIndex, MealType.lunch),
                           ),
                           _QuickFixChip(
+                            label: 'Merenda',
+                            onTap: () => onSetMealType(mealIndex, MealType.merenda),
+                          ),
+                          _QuickFixChip(
                             label: 'Cena',
                             onTap: () => onSetMealType(mealIndex, MealType.dinner),
                           ),
@@ -566,9 +575,11 @@ class _DayReviewCard extends StatelessWidget {
                             ListTile(
                               dense: true,
                               contentPadding: EdgeInsets.zero,
-                              leading: itemWarn
-                                  ? const Icon(Icons.warning_amber_rounded, color: Colors.orange)
-                                  : const Icon(Icons.check_circle_outline, size: 18),
+                              leading: foodIconForName(
+                                item.name,
+                                color: itemWarn ? colorScheme.tertiary : colorScheme.onSurfaceVariant,
+                                size: 18,
+                              ),
                               title: Text(item.name),
                               subtitle: Text(_itemText(item)),
                               trailing: Wrap(
@@ -708,20 +719,21 @@ class _ConfidenceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     late final String label;
     late final Color color;
     switch (level) {
       case _ConfidenceLevel.high:
         label = 'Confidenza: alta';
-        color = Colors.green;
+        color = colorScheme.secondary;
         break;
       case _ConfidenceLevel.medium:
         label = 'Confidenza: media';
-        color = Colors.orange;
+        color = colorScheme.tertiary;
         break;
       case _ConfidenceLevel.low:
         label = 'Confidenza: bassa';
-        color = Colors.redAccent;
+        color = colorScheme.error;
         break;
     }
     return Container(

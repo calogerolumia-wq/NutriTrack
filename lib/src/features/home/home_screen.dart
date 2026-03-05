@@ -6,16 +6,52 @@ import '../../data/models/day_plan.dart';
 import '../../data/models/diet_plan.dart';
 import '../../state/diet_provider.dart';
 import '../../state/providers.dart';
+import '../../state/ui_preferences_controller.dart';
 import 'day_detail_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final _weekDayKeys = List<GlobalKey>.generate(7, (_) => GlobalKey());
+  DateTime? _lastFocusedDate;
+
+  void _focusSelectedDay(DateTime selectedDate, DateTime weekStart) {
+    final index = selectedDate.difference(weekStart).inDays;
+    if (index < 0 || index >= _weekDayKeys.length) {
+      return;
+    }
+    if (_lastFocusedDate != null && AppDateUtils.isSameDay(_lastFocusedDate!, selectedDate)) {
+      return;
+    }
+    _lastFocusedDate = selectedDate;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final targetContext = _weekDayKeys[index].currentContext;
+      if (targetContext == null) {
+        return;
+      }
+      Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
     final planAsync = ref.watch(dietControllerProvider);
     final clipboardMeals = ref.watch(mealClipboardProvider);
+    final readOnly = ref.watch(dietReadOnlyProvider);
     final plan = planAsync.valueOrNull;
     final selectedDay = plan == null ? null : _dayForDate(plan, selectedDate);
     final hasMeals = selectedDay?.meals.isNotEmpty ?? false;
@@ -27,7 +63,7 @@ class HomeScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Aggiungi pasto',
-            onPressed: plan == null
+            onPressed: plan == null || readOnly
                 ? null
                 : () async {
                     final meal = await showMealEditorDialog(context);
@@ -40,8 +76,8 @@ class HomeScreen extends ConsumerWidget {
           PopupMenuButton<String>(
             tooltip: 'Azioni giorno',
             onSelected: (value) async {
-              if (value == 'copy') {
-                if (!hasMeals) {
+                if (value == 'copy') {
+                if (!hasMeals || readOnly) {
                   return;
                 }
                 ref.read(mealClipboardProvider.notifier).state = selectedDay!.meals;
@@ -51,7 +87,7 @@ class HomeScreen extends ConsumerWidget {
                 return;
               }
               if (value == 'paste') {
-                if (!canPaste) {
+                if (!canPaste || readOnly) {
                   return;
                 }
                 await ref.read(dietControllerProvider.notifier).pasteMeals(selectedDate, clipboardMeals);
@@ -63,7 +99,7 @@ class HomeScreen extends ConsumerWidget {
                 return;
               }
               if (value == 'duplicate') {
-                if (!hasMeals) {
+                if (!hasMeals || readOnly) {
                   return;
                 }
                 await ref
@@ -79,17 +115,17 @@ class HomeScreen extends ConsumerWidget {
             itemBuilder: (_) => [
               PopupMenuItem<String>(
                 value: 'copy',
-                enabled: hasMeals,
+                enabled: hasMeals && !readOnly,
                 child: const Text('Copia pasti'),
               ),
               PopupMenuItem<String>(
                 value: 'paste',
-                enabled: canPaste,
+                enabled: canPaste && !readOnly,
                 child: const Text('Incolla pasti'),
               ),
               PopupMenuItem<String>(
                 value: 'duplicate',
-                enabled: hasMeals,
+                enabled: hasMeals && !readOnly,
                 child: const Text('Duplica su domani'),
               ),
             ],
@@ -114,19 +150,13 @@ class HomeScreen extends ConsumerWidget {
         ),
         data: (plan) {
           final weekStart = AppDateUtils.startOfWeekMonday(selectedDate);
+          _focusSelectedDay(selectedDate, weekStart);
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: _PlanSummaryCard(
-                  plan: plan,
-                  selectedDay: _dayForDate(plan, selectedDate),
-                ),
-              ),
               SizedBox(
-                height: 100,
+                height: 106,
                 child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   scrollDirection: Axis.horizontal,
                   itemCount: 7,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
@@ -134,23 +164,35 @@ class HomeScreen extends ConsumerWidget {
                     final day = weekStart.add(Duration(days: index));
                     final isSelected = AppDateUtils.isSameDay(day, selectedDate);
                     final dayPlan = _dayForDate(plan, day);
-                    return _WeekDayChip(
-                      date: day,
-                      selected: isSelected,
-                      hasMeals: (dayPlan?.meals.isNotEmpty ?? false),
-                      completionRate: dayPlan?.completionRate ?? 0,
-                      onTap: () => ref.read(selectedDateProvider.notifier).state = day,
+                    return KeyedSubtree(
+                      key: _weekDayKeys[index],
+                      child: _WeekDayChip(
+                        date: day,
+                        selected: isSelected,
+                        hasMeals: (dayPlan?.meals.isNotEmpty ?? false),
+                        completionRate: dayPlan?.completionRate ?? 0,
+                        onTap: () => ref.read(selectedDateProvider.notifier).state = day,
+                      ),
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                child: _ReadOnlyBar(
+                  readOnly: readOnly,
+                  onChanged: (value) {
+                    ref.read(dietReadOnlyProvider.notifier).setDietReadOnly(value);
+                  },
+                ),
+              ),
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   child: DayDetailView(
                     key: ValueKey(AppDateUtils.ymdKey(selectedDate)),
                     date: selectedDate,
+                    readOnly: readOnly,
                   ),
                 ),
               ),
@@ -189,66 +231,39 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _PlanSummaryCard extends StatelessWidget {
-  const _PlanSummaryCard({
-    required this.plan,
-    required this.selectedDay,
+class _ReadOnlyBar extends StatelessWidget {
+  const _ReadOnlyBar({
+    required this.readOnly,
+    required this.onChanged,
   });
 
-  final DietPlan plan;
-  final DayPlan? selectedDay;
+  final bool readOnly;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final calories = selectedDay?.totalKcal ?? 0;
-    final target = plan.targets.calories;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.primaryContainer,
-            colorScheme.tertiaryContainer,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  plan.name,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Settimana attiva',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${calories.toStringAsFixed(0)} kcal',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+    return Material(
+      color: readOnly ? colorScheme.errorContainer.withOpacity(0.35) : colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Icon(readOnly ? Icons.lock_outline : Icons.lock_open_outlined),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Modalita solo lettura',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
-              if (target != null)
-                Text(
-                  'target ${target.toStringAsFixed(0)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-            ],
-          ),
-        ],
+            ),
+            Switch(
+              value: readOnly,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -280,31 +295,36 @@ class _WeekDayChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: 84,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               AppDateUtils.weekdayShortIt(date),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: textColor,
                     fontWeight: FontWeight.w700,
                   ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              '${date.day}',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                  ),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${date.day}',
+                maxLines: 1,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
             ),
-            const SizedBox(height: 8),
             LinearProgressIndicator(
               minHeight: 4,
               borderRadius: BorderRadius.circular(99),

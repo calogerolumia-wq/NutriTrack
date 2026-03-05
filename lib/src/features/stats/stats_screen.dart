@@ -31,6 +31,7 @@ class _StatsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final weekStart = AppDateUtils.startOfWeekMonday(DateTime.now());
     final days = List<DayPlan>.generate(7, (index) {
       final date = weekStart.add(Duration(days: index));
@@ -68,7 +69,7 @@ class _StatsBody extends StatelessWidget {
                               toY: value,
                               borderRadius: BorderRadius.circular(8),
                               width: 18,
-                              color: Colors.teal,
+                              color: colorScheme.secondary,
                             ),
                           ],
                         );
@@ -111,7 +112,7 @@ class _StatsBody extends StatelessWidget {
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 220,
-                  child: _MacroPieChart(day: today),
+                  child: _MacroPieChart(day: today, colorScheme: colorScheme),
                 ),
               ],
             ),
@@ -194,9 +195,13 @@ class _StatsBody extends StatelessWidget {
 }
 
 class _MacroPieChart extends StatelessWidget {
-  const _MacroPieChart({required this.day});
+  const _MacroPieChart({
+    required this.day,
+    required this.colorScheme,
+  });
 
   final DayPlan day;
+  final ColorScheme colorScheme;
 
   @override
   Widget build(BuildContext context) {
@@ -209,19 +214,19 @@ class _MacroPieChart extends StatelessWidget {
     }
     final sections = [
       PieChartSectionData(
-        color: Colors.teal,
+        color: colorScheme.secondary,
         value: p,
         title: 'P',
         radius: 56,
       ),
       PieChartSectionData(
-        color: Colors.orange,
+        color: colorScheme.tertiary,
         value: c,
         title: 'C',
         radius: 56,
       ),
       PieChartSectionData(
-        color: Colors.blueGrey,
+        color: colorScheme.primary,
         value: f,
         title: 'F',
         radius: 56,

@@ -8,7 +8,7 @@ class ThemeController extends Notifier<ThemeMode> {
 
   @override
   ThemeMode build() {
-    final raw = ref.read(sharedPreferencesProvider).getString(_key) ?? 'system';
+    final raw = ref.read(sharedPreferencesProvider).getString(_key) ?? 'dark';
     return _fromStorage(raw);
   }
 
@@ -23,8 +23,10 @@ class ThemeController extends Notifier<ThemeMode> {
         return ThemeMode.light;
       case 'dark':
         return ThemeMode.dark;
+      case 'system':
+        return ThemeMode.dark;
       default:
-        return ThemeMode.system;
+        return ThemeMode.dark;
     }
   }
 

@@ -18,3 +18,19 @@ class UiPreferencesController extends Notifier<bool> {
 
 final showAdvancedDayMetricsProvider =
     NotifierProvider<UiPreferencesController, bool>(UiPreferencesController.new);
+
+class DietReadOnlyController extends Notifier<bool> {
+  static const _dietReadOnlyKey = 'diet_read_only_v1';
+
+  @override
+  bool build() {
+    return ref.read(sharedPreferencesProvider).getBool(_dietReadOnlyKey) ?? false;
+  }
+
+  Future<void> setDietReadOnly(bool value) async {
+    state = value;
+    await ref.read(sharedPreferencesProvider).setBool(_dietReadOnlyKey, value);
+  }
+}
+
+final dietReadOnlyProvider = NotifierProvider<DietReadOnlyController, bool>(DietReadOnlyController.new);

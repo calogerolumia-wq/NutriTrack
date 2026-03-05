@@ -23,6 +23,7 @@ dependencies:
   collection: ^1.19.1
   pdf: ^3.11.1
   printing: ^5.14.0
+  font_awesome_flutter: ^10.8.0
 
 dev_dependencies:
   flutter_test:

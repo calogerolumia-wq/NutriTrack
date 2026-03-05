@@ -77,8 +77,9 @@ class DietTextParser {
 
   static const _mealTokens = <MealType, List<String>>{
     MealType.breakfast: ['colazione', 'breakfast'],
-    MealType.snack: ['spuntino', 'merenda', 'snack'],
+    MealType.snack: ['spuntino mattutino', 'spuntino mattina', 'spuntino', 'snack'],
     MealType.lunch: ['pranzo', 'lunch'],
+    MealType.merenda: ['merenda', 'spuntino pomeridiano', 'spuntino pomeriggio', 'snack pomeridiano'],
     MealType.dinner: ['cena', 'dinner'],
   };
 
@@ -513,21 +514,27 @@ class DietTextParser {
 
   _DetectedMeal? _detectMeal(String line) {
     final normalized = _stripListPrefix(_normalize(line));
+    MealType? detectedType;
+    var detectedToken = '';
+
     for (final entry in _mealTokens.entries) {
-      final token = entry.value.firstWhere(
-        (keyword) => normalized.startsWith(keyword),
-        orElse: () => '',
-      );
-      if (token.isNotEmpty) {
-        final cleaned = line
-            .replaceFirst(RegExp(r'^[\s\-\*\u2022]+'), '')
-            .replaceFirst(RegExp('^$token\\s*[:\\-]?', caseSensitive: false), '')
-            .trim();
-        final label = cleaned.isEmpty ? mealTypeLabel(entry.key) : cleaned;
-        return _DetectedMeal(type: entry.key, label: label, uncertain: false);
+      for (final keyword in entry.value) {
+        if (normalized.startsWith(keyword) && keyword.length > detectedToken.length) {
+          detectedType = entry.key;
+          detectedToken = keyword;
+        }
       }
     }
-    return null;
+    if (detectedType == null || detectedToken.isEmpty) {
+      return null;
+    }
+
+    final cleaned = line
+        .replaceFirst(RegExp(r'^[\s\-\*\u2022]+'), '')
+        .replaceFirst(RegExp('^${RegExp.escape(detectedToken)}\\s*[:\\-]?', caseSensitive: false), '')
+        .trim();
+    final label = cleaned.isEmpty ? mealTypeLabel(detectedType) : cleaned;
+    return _DetectedMeal(type: detectedType, label: label, uncertain: false);
   }
 
   ParsedMealItem? _parseMealItem(String line) {

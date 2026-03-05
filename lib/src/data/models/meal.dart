@@ -4,6 +4,7 @@ enum MealType {
   breakfast,
   snack,
   lunch,
+  merenda,
   dinner,
   custom,
 }
@@ -23,6 +24,8 @@ String mealTypeLabel(MealType type) {
       return 'Spuntino';
     case MealType.lunch:
       return 'Pranzo';
+    case MealType.merenda:
+      return 'Merenda';
     case MealType.dinner:
       return 'Cena';
     case MealType.custom:
@@ -38,6 +41,8 @@ String mealTypeDefaultIcon(MealType type) {
       return 'apple';
     case MealType.lunch:
       return 'plate';
+    case MealType.merenda:
+      return 'apple';
     case MealType.dinner:
       return 'moon';
     case MealType.custom:

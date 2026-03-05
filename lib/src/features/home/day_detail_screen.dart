@@ -3,26 +3,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/app_date_utils.dart';
+import '../../core/utils/food_icon_utils.dart';
 import '../../core/utils/meal_icon_utils.dart';
 import '../../data/models/day_plan.dart';
 import '../../data/models/diet_plan.dart';
 import '../../data/models/meal.dart';
 import '../../data/models/meal_item.dart';
 import '../../state/diet_provider.dart';
-import '../../state/ui_preferences_controller.dart';
 
 class DayDetailView extends ConsumerWidget {
   const DayDetailView({
     super.key,
     required this.date,
+    this.readOnly = false,
   });
 
   final DateTime date;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final planAsync = ref.watch(dietControllerProvider);
-    final showAdvancedDayMetrics = ref.watch(showAdvancedDayMetricsProvider);
     return planAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stackTrace) => Center(child: Text('Errore: $error')),
@@ -32,22 +33,29 @@ class DayDetailView extends ConsumerWidget {
           ..sort((a, b) => _mealOrder(a.type).compareTo(_mealOrder(b.type)));
         final hasMeals = sortedMeals.isNotEmpty;
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 120),
           children: [
-            _DayHeaderCard(
-              date: date,
-              day: day,
-              showAdvancedMetrics: showAdvancedDayMetrics,
-            ),
-            const SizedBox(height: 16),
+            if (readOnly) ...[
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: const Text('Modalita solo lettura attiva'),
+                  subtitle: const Text('Disattiva "Lock diet" dalla Home per modificare i pasti.'),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (!hasMeals)
               _EmptyDayState(
-                onAddMeal: () async {
-                  final meal = await showMealEditorDialog(context);
-                  if (meal != null) {
-                    await ref.read(dietControllerProvider.notifier).addMeal(date, meal);
-                  }
-                },
+                readOnly: readOnly,
+                onAddMeal: readOnly
+                    ? null
+                    : () async {
+                        final meal = await showMealEditorDialog(context);
+                        if (meal != null) {
+                          await ref.read(dietControllerProvider.notifier).addMeal(date, meal);
+                        }
+                      },
               ),
             if (hasMeals)
               ...sortedMeals.map(
@@ -56,6 +64,7 @@ class DayDetailView extends ConsumerWidget {
                   child: _MealCard(
                     meal: meal,
                     date: date,
+                    readOnly: readOnly,
                   ),
                 ),
               ),
@@ -93,106 +102,14 @@ class DayDetailView extends ConsumerWidget {
   }
 }
 
-class _DayHeaderCard extends StatelessWidget {
-  const _DayHeaderCard({
-    required this.date,
-    required this.day,
-    required this.showAdvancedMetrics,
-  });
-
-  final DateTime date;
-  final DayPlan? day;
-  final bool showAdvancedMetrics;
-
-  @override
-  Widget build(BuildContext context) {
-    final calories = day?.totalKcal ?? 0;
-    final protein = day?.totalProtein ?? 0;
-    final carbs = day?.totalCarbs ?? 0;
-    final fat = day?.totalFat ?? 0;
-    final label = '${AppDateUtils.weekdayLongIt(date)} ${date.day} ${_monthNameIt(date.month)}';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 14,
-              runSpacing: 10,
-              children: [
-                _MetricPill(label: 'kcal', value: calories.toStringAsFixed(0)),
-                if (showAdvancedMetrics) ...[
-                  _MetricPill(label: 'Proteine', value: '${protein.toStringAsFixed(0)} g'),
-                  _MetricPill(label: 'Carboidrati', value: '${carbs.toStringAsFixed(0)} g'),
-                  _MetricPill(label: 'Grassi', value: '${fat.toStringAsFixed(0)} g'),
-                  _MetricPill(
-                    label: 'Aderenza',
-                    value: '${((day?.completionRate ?? 0) * 100).toStringAsFixed(0)}%',
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _monthNameIt(int month) {
-    const names = <String>[
-      'Gennaio',
-      'Febbraio',
-      'Marzo',
-      'Aprile',
-      'Maggio',
-      'Giugno',
-      'Luglio',
-      'Agosto',
-      'Settembre',
-      'Ottobre',
-      'Novembre',
-      'Dicembre',
-    ];
-    if (month < 1 || month > 12) {
-      return '';
-    }
-    return names[month - 1];
-  }
-}
-
-class _MetricPill extends StatelessWidget {
-  const _MetricPill({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(99),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      child: Text('$label $value', style: Theme.of(context).textTheme.labelLarge),
-    );
-  }
-}
-
 class _EmptyDayState extends StatelessWidget {
-  const _EmptyDayState({required this.onAddMeal});
+  const _EmptyDayState({
+    required this.readOnly,
+    required this.onAddMeal,
+  });
 
-  final VoidCallback onAddMeal;
+  final bool readOnly;
+  final VoidCallback? onAddMeal;
 
   @override
   Widget build(BuildContext context) {
@@ -207,12 +124,12 @@ class _EmptyDayState extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
-            const Text('Aggiungi colazione, pranzo, cena o pasti personalizzati.'),
+            const Text('Aggiungi colazione, spuntino, pranzo, merenda, cena o pasti personalizzati.'),
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: onAddMeal,
               icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Crea primo pasto'),
+              label: Text(readOnly ? 'Modifica disabilitata' : 'Crea primo pasto'),
             ),
           ],
         ),
@@ -225,10 +142,12 @@ class _MealCard extends ConsumerWidget {
   const _MealCard({
     required this.meal,
     required this.date,
+    required this.readOnly,
   });
 
   final Meal meal;
   final DateTime date;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -269,12 +188,17 @@ class _MealCard extends ConsumerWidget {
                 ),
                 Checkbox(
                   value: meal.completed,
-                  onChanged: (value) {
-                    notifier.toggleMealCompleted(date, meal.id, value ?? false);
-                  },
+                  onChanged: readOnly
+                      ? null
+                      : (value) {
+                          notifier.toggleMealCompleted(date, meal.id, value ?? false);
+                        },
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (value) async {
+                  enabled: !readOnly,
+                  onSelected: readOnly
+                      ? null
+                      : (value) async {
                     if (value == 'edit') {
                       final updated = await showMealEditorDialog(context, initial: meal);
                       if (updated != null) {
@@ -308,26 +232,32 @@ class _MealCard extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(item.name),
                   subtitle: Text(_itemSubtitle(item)),
-                  leading: item.uncertain
-                      ? const Icon(Icons.warning_amber_rounded, color: Colors.orange)
-                      : const Icon(Icons.check_circle_outline, size: 18),
+                  leading: foodIconForName(
+                    item.name,
+                    color: item.uncertain ? colorScheme.tertiary : colorScheme.onSurfaceVariant,
+                    size: 20,
+                  ),
                   trailing: Wrap(
                     spacing: 2,
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, size: 20),
-                        onPressed: () async {
-                          final updated = await showMealItemDialog(context, initial: item);
-                          if (updated != null) {
-                            await notifier.updateItem(date, meal.id, updated);
-                          }
-                        },
+                        onPressed: readOnly
+                            ? null
+                            : () async {
+                                final updated = await showMealItemDialog(context, initial: item);
+                                if (updated != null) {
+                                  await notifier.updateItem(date, meal.id, updated);
+                                }
+                              },
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 20),
-                        onPressed: () {
-                          notifier.deleteItem(date, meal.id, item.id);
-                        },
+                        onPressed: readOnly
+                            ? null
+                            : () {
+                                notifier.deleteItem(date, meal.id, item.id);
+                              },
                       ),
                     ],
                   ),
@@ -335,12 +265,14 @@ class _MealCard extends ConsumerWidget {
               ),
             const SizedBox(height: 6),
             TextButton.icon(
-              onPressed: () async {
-                final item = await showMealItemDialog(context);
-                if (item != null) {
-                  await notifier.addItem(date, meal.id, item);
-                }
-              },
+              onPressed: readOnly
+                  ? null
+                  : () async {
+                      final item = await showMealItemDialog(context);
+                      if (item != null) {
+                        await notifier.addItem(date, meal.id, item);
+                      }
+                    },
               icon: const Icon(Icons.add),
               label: const Text('Aggiungi elemento'),
             ),
@@ -646,10 +578,12 @@ int _mealOrder(MealType type) {
       return 1;
     case MealType.lunch:
       return 2;
-    case MealType.dinner:
+    case MealType.merenda:
       return 3;
-    case MealType.custom:
+    case MealType.dinner:
       return 4;
+    case MealType.custom:
+      return 5;
   }
 }
 

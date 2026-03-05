@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../state/ui_preferences_controller.dart';
 import 'import_review_screen.dart';
 import 'importer_providers.dart';
 import 'models/import_draft.dart';
@@ -25,11 +26,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = ref.watch(dietReadOnlyProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Importa dieta')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          if (readOnly) ...[
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.lock_outline),
+                title: Text('Modalita solo lettura attiva'),
+                subtitle: Text('Import bloccato. Disattiva "Lock diet" dalla Home per importare.'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           const _IntroCard(),
           const SizedBox(height: 16),
           Wrap(
@@ -37,12 +49,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             runSpacing: 10,
             children: [
               FilledButton.icon(
-                onPressed: _isProcessing ? null : () => _importFrom(ImageSource.camera),
+                onPressed: _isProcessing || readOnly ? null : () => _importFrom(ImageSource.camera),
                 icon: const Icon(Icons.photo_camera_outlined),
                 label: const Text('Scatta foto'),
               ),
               OutlinedButton.icon(
-                onPressed: _isProcessing ? null : () => _importFrom(ImageSource.gallery),
+                onPressed: _isProcessing || readOnly ? null : () => _importFrom(ImageSource.gallery),
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text('Scegli da galleria'),
               ),
@@ -75,7 +87,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             _ImportResultCard(draft: _draft!),
             const SizedBox(height: 10),
             FilledButton.icon(
-              onPressed: () => _openReview(_draft!),
+              onPressed: readOnly ? null : () => _openReview(_draft!),
               icon: const Icon(Icons.rate_review_outlined),
               label: const Text('Apri revisione import'),
             ),

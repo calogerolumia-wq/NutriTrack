@@ -7,6 +7,7 @@ import '../data/models/diet_plan.dart';
 import '../data/models/meal.dart';
 import '../data/models/meal_item.dart';
 import 'providers.dart';
+import 'ui_preferences_controller.dart';
 
 class DietController extends AsyncNotifier<DietPlan> {
   static final _uuid = Uuid();
@@ -30,6 +31,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> renamePlan(String name, {String? note}) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final current = state.valueOrNull;
     if (current == null) {
       return;
@@ -39,6 +43,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> updateTargets(MacroTargets targets) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final current = state.valueOrNull;
     if (current == null) {
       return;
@@ -46,7 +53,24 @@ class DietController extends AsyncNotifier<DietPlan> {
     await _persist(current.copyWith(targets: targets));
   }
 
+  Future<void> resetData() async {
+    if (_isReadOnly()) {
+      return;
+    }
+    final resetPlan = _sortPlanDays(
+      DietPlan(
+        id: _uuid.v4(),
+        name: 'Dieta',
+        createdAt: DateTime.now(),
+      ),
+    );
+    await _persist(resetPlan);
+  }
+
   Future<void> addMeal(DateTime date, Meal meal) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateDay(date, (day) => day.copyWith(meals: [...day.meals, meal]));
     if (updated != null) {
       await _persist(updated);
@@ -54,6 +78,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> updateMeal(DateTime date, Meal meal) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateDay(date, (day) {
       final meals = day.meals.map((e) => e.id == meal.id ? meal : e).toList();
       return day.copyWith(meals: meals);
@@ -64,6 +91,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> deleteMeal(DateTime date, String mealId) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateDay(date, (day) {
       final meals = day.meals.where((meal) => meal.id != mealId).toList();
       return day.copyWith(meals: meals);
@@ -74,6 +104,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> toggleMealCompleted(DateTime date, String mealId, bool completed) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateDay(date, (day) {
       final meals = day.meals
           .map((meal) => meal.id == mealId ? meal.copyWith(completed: completed) : meal)
@@ -86,6 +119,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> addItem(DateTime date, String mealId, MealItem item) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateMealItems(date, mealId, (items) => [...items, item]);
     if (updated != null) {
       await _persist(updated);
@@ -93,6 +129,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> updateItem(DateTime date, String mealId, MealItem item) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated = _updateMealItems(
       date,
       mealId,
@@ -104,6 +143,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> deleteItem(DateTime date, String mealId, String itemId) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final updated =
         _updateMealItems(date, mealId, (items) => items.where((item) => item.id != itemId).toList());
     if (updated != null) {
@@ -112,6 +154,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> duplicateDay(DateTime sourceDate, DateTime targetDate) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final plan = state.valueOrNull;
     if (plan == null) {
       return;
@@ -128,6 +173,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> pasteMeals(DateTime date, List<Meal> clipboardMeals) async {
+    if (_isReadOnly()) {
+      return;
+    }
     if (clipboardMeals.isEmpty) {
       return;
     }
@@ -139,6 +187,9 @@ class DietController extends AsyncNotifier<DietPlan> {
   }
 
   Future<void> mergeImportedDays(List<DayPlan> importedDays) async {
+    if (_isReadOnly()) {
+      return;
+    }
     final plan = state.valueOrNull;
     if (plan == null || importedDays.isEmpty) {
       return;
@@ -258,4 +309,6 @@ class DietController extends AsyncNotifier<DietPlan> {
     state = AsyncData(plan);
     await ref.read(dietRepositoryProvider).savePlan(plan);
   }
+
+  bool _isReadOnly() => ref.read(dietReadOnlyProvider);
 }
